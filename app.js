@@ -7,39 +7,43 @@ var SimpleSend = {
 
 SimpleSend.Message = Backbone.Model.extend({
 
-    url: function() { return "https://mandrillapp.com/api/1.0/messages/send.json"; },
+    url: 'https://mandrillapp.com/api/1.0/messages/send.json',
 
     defaults: {
-        key: "",
+        key: '',
         message: {
-            text: "",
-            subject: "",
-            from_email: "",
+            text: '',
+            subject: '',
+            from_email: '',
             to: [{
-                email: ""
+                email: ''
             }],
             track_opens: true,
             track_clicks: true,
         }
     }
-
 });
 
 SimpleSend.PDFAttachment = Backbone.Model.extend({
 
     download: function(url) {
-        var deferred = $.Deferred();
-        var _this = this;
+        var deferred = $.Deferred(),
+            _this = this,
+            result = url.match(/[^/]+$/i),
+            name = (result && result.length) ? result[0] : 'No Name';
+
         PDFJS.disableWorker = true;
         PDFJS.getDocument(url).then(function(pdf) {
-            var data = pdf.getData()._data;
-            var base64 = ''
+            var data = pdf.getData()._data,
+                base64 = ''
+
             for (var i = 0; i < data.byteLength; i++) {
                 base64 += String.fromCharCode(data[i]);
             }
+
             _this.set([{
                 content: btoa(base64),
-                name: url,
+                name: name,
                 type: 'application/pdf'
             }]);
             deferred.resolve();
@@ -61,33 +65,37 @@ SimpleSend.MessageView = Backbone.View.extend({
             this.$('input').each( function() { $(this).val(''); });
             this.$('textarea').each( function() { $(this).val(''); });
         },
+        'click #sendEmail': 'sendEmail'
+    },
 
-        'click #sendEmail': function(click) {
-            var btn = $(click.currentTarget).button('loading');
-            var _this = this;
+    sendEmail: function(click) {
+        var btn = $(click.currentTarget).button('loading'),
+            _this = this;
 
-            successCallback = function(data, statusText, jqXHR) {
-                btn.removeClass('btn-primary btn-danger').addClass('btn-success');
-                console.log('success', data, statusText, jqXHR);
-                doneCallback()
-            };
+        successCallback = function(data, statusText, jqXHR) {
+            btn.button('success').removeClass('btn-primary btn-danger').addClass('btn-success');
+            doneCallback(statusText, jqXHR);
+        };
 
-            failCallback = function(data, statusText, jqXHR) {
-                btn.removeClass('btn-primary btn-success').addClass('btn-danger');
-                console.log('failure', data, statusText, jqXHR);
-                doneCallback();
-            };
+        failCallback = function(data, statusText, jqXHR) {
+            btn.button('fail').removeClass('btn-primary btn-success').addClass('btn-danger');
+            doneCallback(statusText, jqXHR);
+        };
 
-            doneCallback = function() {
-                setTimeout(function() {
-                    btn.button('reset').removeClass('btn-danger btn-success').addClass('btn-primary');
-                }, 3000);
-            }
-
-            $.when(this.serialize()).pipe( function() {
-                _this.model.save().then(successCallback, failCallback)
-            });
+        doneCallback = function(statusText, jqXHR) {
+            console.log(statusText, jqXHR);
+            setTimeout(function() {
+                btn.button('reset')
+                    .removeClass('btn-danger btn-success')
+                    .addClass('btn-primary');
+            }, 3000);
+            this.$('#clearEmail').click();
+            this.$('input:first').focus();
         }
+
+        $.when(this.serialize()).pipe( function() {
+            _this.model.save().then(successCallback, failCallback)
+        });
     },
 
     serialize: function() {
@@ -103,8 +111,7 @@ SimpleSend.MessageView = Backbone.View.extend({
             }
         };
 
-        var attachmentURL = this.$('#emailAttachment').val();
-        var promise;
+        var promise, attachmentURL = this.$('#emailAttachment').val();
         if (attachmentURL) {
             var attachment = vals.message.attachments = new SimpleSend.PDFAttachment();
             promise = attachment.download(attachmentURL);
